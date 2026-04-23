@@ -4,22 +4,21 @@ Personal Project on the Earned Income Tax Credits effect
 on Education Outcomes
 ;
 
-x "cd S:\EC490\Data";
+x "cd S:\EITC\Data";
 libname InputDS ".";
 
 
-x "cd S:\EC490\Output";
+x "cd S:\EITC\Output";
 libname P2 ".";
-filename P2 ".";
 
 options nodate;
 ods noproctitle;
 
 
-ods pdf file="P2 EC490_DataSetup.pdf" dpi=300 style=Sapphire;
+ods pdf file="EITC_Data_Output.pdf" dpi=300 style=Sapphire;
 
 data codebook;
-  infile "S:\EC490\Data\Correct_Labels_TextFile.txt" lrecl=200 truncover firstobs=6;
+  infile "S:\EITC\Data\Correct_Labels_TextFile.txt" lrecl=200 truncover firstobs=6;
   length var $11 rawlabel $38 year $4 final_label $100 newname $32;
   input @1 var $10.
   @12 rawlabel $38.
@@ -57,7 +56,7 @@ data codebook;
     drop yearnum;
 run;
 
-proc import datafile="S:\EC490\Data\Fixed_Data.xlsx"
+proc import datafile="S:\EITC\Data\Fixed_Data.xlsx"
   out=work.projectdata_raw
   dbms=xlsx
 ;

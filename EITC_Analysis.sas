@@ -4,15 +4,20 @@ Personal Project on the Earned Income Tax Credits effect
 on Education Outcomes
 ;
 
-x "cd S:\EC490\Data";
+x "cd S:\EITC\Data";
 libname InputDS ".";
 
-x "cd S:\EC490\Output";
+x "cd S:\EITC\Output";
 libname P2 ".";
 
-ods pdf file="P2 EC490_Analysis_Fixed.pdf" dpi=300 style=Sapphire;
+ods pdf file="EITC_Summary_Stats.pdf" dpi=300 style=Sapphire startpage=never;
+ods graphics / width=5.5in;;
+
 options nodate;
 ods noproctitle;
+
+
+%let FootOpts = j=L h=10pt;
 
 /* FORMATS*/
 
@@ -254,17 +259,19 @@ quit;
 
 /* SUMMARY STATISTICS ON CLEANED LONG DATASET */
 
+title "Subsample Check: SRC vs SEO Composition";
 proc freq data=P2.ProjectData_Cleaned_Long;
     tables WHETHERSAMPLEORNONSAMPLE / missing;
-    title "Subsample Check: SRC vs SEO Composition";
 run;
+title;
 
+title "Summary Statistics - Key Analysis Variables by Year";
 proc means data=P2.ProjectData_Cleaned_Long n nmiss mean std min max maxdec=2;
     class YEAR;
     var AGEOFINDIVIDUAL EDUCATIONATTAINED FATHERSEDUCATION
         MOTHERSEDUCATION TOTALFAMILYINCOME N_KIDS EITC_EXPOSURE;
-    title "Summary Statistics - Key Analysis Variables by Year";
 run;
+title;
 
 options nodate;
 ods noproctitle;
@@ -456,9 +463,7 @@ if missing(first_post86_state)
                 end;
             end;
         end;
-        /* NEW: fallback for persons whose ages 10-16 window predated
-           1986 state data — use first observed post-1986 state instead
-           of defaulting to the modal_state=0 catch-all. */
+
         else if not missing(first_post86_state)
             then modal_state = first_post86_state;
 
@@ -499,6 +504,24 @@ data work.analysis_sample;
     if dad_educ in (9, 98, 99) then dad_educ = .;
     if mom_educ in (9, 98, 99) then mom_educ = .;
 
+    if not missing(dad_educ) then do;
+        dad_BelowHS        = (dad_educ in (1,2,3));
+        dad_HS             = (dad_educ in (4,5));
+        dad_CollegeOrAbove = (dad_educ in (6,7,8));
+    end;
+    else do;
+        dad_BelowHS = .; dad_HS = .; dad_CollegeOrAbove = .;
+    end;
+
+    if not missing(mom_educ) then do;
+        mom_BelowHS        = (mom_educ in (1,2,3));
+        mom_HS             = (mom_educ in (4,5));
+        mom_CollegeOrAbove = (mom_educ in (6,7,8));
+    end;
+    else do;
+        mom_BelowHS = .; mom_HS = .; mom_CollegeOrAbove = .;
+    end;
+
     hs_complete = (max_educ >= 12);
     any_college = (max_educ >= 13);
     bachelors   = (max_educ >= 16);
@@ -509,19 +532,10 @@ data work.analysis_sample;
         then log_income = log(avg_family_income);
         else log_income = .;
 
-    /* FIXED: female=1 for women, female=0 for men.
-       Male is the implicit omitted reference in all regressions —
-       the female coefficient shows the gap relative to men. */
     if not missing(sex) then female = (sex = 2);
     else female = .;
 
-    /* FIXED: White (race=1) is now the omitted reference category.
-       race_black and race_other coefficients show gaps relative to
-       White respondents. Categories 3-7 (Native American, Asian,
-       Latino, Other color, Other) are collapsed into race_other
-       because their combined share is ~7%, making separate estimates
-       unreliable. All coefficients are now interpretable relative
-       to White as the baseline. */
+
     if not missing(race) then do;
         race_black = (race = 2);
         race_other = (race in (3,4,5,6,7));
@@ -553,29 +567,31 @@ run;
 
 /* CHECK SAMPLE */
 
+title "Subsample Composition in Analysis Sample (1=SRC, 2=SEO)";
 proc freq data=work.analysis_sample;
     tables subsample / missing;
-    title "Subsample Composition in Analysis Sample (1=SRC, 2=SEO)";
 run;
+title;
 
-/* UPDATED: race_white removed from tables since White is now the
-   reference and has no binary indicator. race_other added.
-   nkids_ref replaces modal_nkids. */
+
+title "Sample Frequency Checks";
 proc freq data=work.analysis_sample;
     tables hs_complete any_college bachelors
            dad_educ mom_educ cohort_ref below_phaseout
            modal_state nkids_ref female race_black race_other / missing;
-    title "Sample Frequency Checks";
 run;
+title;
 
+title "Summary Statistics - Analysis Sample";
 proc means data=work.analysis_sample n nmiss mean std min max maxdec=2;
     var avg_eitc avg_eitc_000 max_educ hs_complete any_college
         bachelors avg_family_income log_income female race_black race_other;
-    title "Summary Statistics - Analysis Sample";
 run;
+title;
 
 /* CORRELATION MATRIX */
 
+title "Correlation Matrix - Continuous and Binary Analysis Variables";
 proc corr data=work.analysis_sample
           pearson
           plots=matrix(histogram)
@@ -586,97 +602,108 @@ proc corr data=work.analysis_sample
         female
         race_black race_other
         dad_educ mom_educ;
-    title "Correlation Matrix - Continuous and Binary Analysis Variables";
 run;
+title;
 
 /* dad_educ and mom_educ seperate */
+title "Correlation Matrix - Parental Education vs EITC and Income";
 proc corr data=work.analysis_sample
           pearson
           nosimple;
     var dad_educ mom_educ avg_eitc_000 log_income;
-    title "Correlation Matrix - Parental Education vs EITC and Income";
 run;
+title;
 
+ods pdf close;
 
-/* REGRESSIONS - WITHOUT INCOME CONTROL
-   Reference categories:
-     Race:      White (race=1, no indicator created)
-     Sex:       Male  (female=0)
-     Cohort:    Born <=1974 (cohort_ref=9999, sorts last)
-     Kids:      0 children (nkids_ref=8, sorts last)
-     State:     State 56 / state unknown=0 (sorts last in class)
-     Parental education: "Some High School" (sorts last alphabetically)  */
+ods pdf file="EITC_Regressions_Plus_Plots.pdf" dpi=300 style=Sapphire startpage=never;
+
+footnote &FootOpts "Note: For both mom and dad education, below high school education is the reference group.";
+footnote2 &FootOpts "For race white is the reference group."
 
 /* HS completion Regression */
+title "HS Completion with Cohort, State, Race, Sex, and Family Size FE";
 proc glm data=work.analysis_sample;
-
-    class dad_educ mom_educ cohort_ref modal_state nkids_ref;
+    class cohort_ref modal_state nkids_ref;
     model hs_complete = avg_eitc_000
                         female race_black race_other
-                        dad_educ mom_educ
+                        dad_HS dad_CollegeOrAbove
+                        mom_HS mom_CollegeOrAbove
                         cohort_ref modal_state nkids_ref / solution;
-    title " HS Completion with Cohort, State, Race, Sex, and Family Size FE";
 run;
 quit;
+title;
 
 /* Any College Regression */
+title "Any College Attendance with Cohort, State, Race, Sex, and Family Size FE";
 proc glm data=work.analysis_sample;
-    class dad_educ mom_educ cohort_ref modal_state nkids_ref;
+    class cohort_ref modal_state nkids_ref;
     model any_college = avg_eitc_000
                         female race_black race_other
-                        dad_educ mom_educ
+                        dad_HS dad_CollegeOrAbove
+                        mom_HS mom_CollegeOrAbove
                         cohort_ref modal_state nkids_ref / solution;
-    title "Any College Attendance with Cohort, State, Race, Sex, and Family Size FE";
 run;
 quit;
+title;
 
 /* Bachelors Regression*/
+title "Bachelors Completion with Cohort, State, Race, Sex, and Family Size FE";
 proc glm data=work.analysis_sample;
-    class dad_educ mom_educ cohort_ref modal_state nkids_ref;
+    class cohort_ref modal_state nkids_ref;
     model bachelors = avg_eitc_000
                       female race_black race_other
-                      dad_educ mom_educ
+                      dad_HS dad_CollegeOrAbove
+                      mom_HS mom_CollegeOrAbove
                       cohort_ref modal_state nkids_ref / solution;
-    title "Bachelors Completion with Cohort, State, Race, Sex, and Family Size FE";
 run;
 quit;
+title;
 
 /* REGRESSIONS - WITH INCOME CONTROL.*/
 
 /* HS completion with income Regression*/
+title "HS Completion with Income, Cohort, State, Race, Sex, and Family Size FE";
 proc glm data=work.analysis_sample;
-    class dad_educ mom_educ cohort_ref modal_state nkids_ref;
+    class cohort_ref modal_state nkids_ref;
     model hs_complete = avg_eitc_000 log_income
                         female race_black race_other
-                        dad_educ mom_educ
+                        dad_HS dad_CollegeOrAbove
+                        mom_HS mom_CollegeOrAbove
                         cohort_ref modal_state nkids_ref / solution;
-    title "HS Completion with Income, Cohort, State, Race, Sex, and Family Size FE";
 run;
 quit;
+title;
 
 /* Any College with income Regression*/
+title "Any College with Income, Cohort, State, Race, Sex, and Family Size FE";
 proc glm data=work.analysis_sample;
-    class dad_educ mom_educ cohort_ref modal_state nkids_ref;
+    class cohort_ref modal_state nkids_ref;
     model any_college = avg_eitc_000 log_income
                         female race_black race_other
-                        dad_educ mom_educ
+                        dad_HS dad_CollegeOrAbove
+                        mom_HS mom_CollegeOrAbove
                         cohort_ref modal_state nkids_ref / solution;
-    title "Any College with Income, Cohort, State, Race, Sex, and Family Size FE";
 run;
 quit;
+title;
 
 /* Bachelors with income Regression */
+title "Bachelors with Income, Cohort, State, Race, Sex, and Family Size FE";
 proc glm data=work.analysis_sample;
-    class dad_educ mom_educ cohort_ref modal_state nkids_ref;
+    class cohort_ref modal_state nkids_ref;
     model bachelors = avg_eitc_000 log_income
                       female race_black race_other
-                      dad_educ mom_educ
+                      dad_HS dad_CollegeOrAbove
+                      mom_HS mom_CollegeOrAbove
                       cohort_ref modal_state nkids_ref / solution;
-    title "Bachelors with Income, Cohort, State, Race, Sex, and Family Size FE";
 run;
 quit;
+title;
 
-/* STEP 7: GRAPHS - COHORT-ADJUSTED OUTCOME RATES BY EITC BIN AND INCOME GROUP */
+footnote;
+
+/* GRAPHS - COHORT-ADJUSTED OUTCOME RATES BY EITC BIN AND INCOME GROUP */
 
 proc glm data=work.analysis_sample noprint;
     class cohort_ref;
@@ -752,6 +779,8 @@ data work.resid_plot_means;
     drop min_n _type_ _freq_;
 run;
 
+title "Cohort-Adjusted College Attendance Rate by EITC Exposure and Income Group";
+footnote &FootOpts "Note: Numbers on points show observation count per bin.";
 proc sgplot data=work.resid_plot_means;
     series x=eitc_bin y=mean_college / group=income_group
            markers markerattrs=(size=8) lineattrs=(thickness=2);
@@ -763,11 +792,12 @@ proc sgplot data=work.resid_plot_means;
     yaxis label="Cohort-Adjusted Rate of Any College Attendance"
           min=0.3 max=0.7;
     keylegend / title="Family Income vs EITC Phaseout Ceiling";
-    title "Cohort-Adjusted College Attendance Rate by EITC Exposure and Income Group";
-    footnote "Note: "
-             "Numbers on points show observation count per bin.";
 run;
+title;
+footnote;
 
+title "Cohort-Adjusted HS Completion Rate by EITC Exposure and Income Group";
+footnote &FootOpts "Note: Numbers on points show observation count per bin.";
 proc sgplot data=work.resid_plot_means;
     series x=eitc_bin y=mean_hs / group=income_group
            markers markerattrs=(size=8) lineattrs=(thickness=2);
@@ -779,11 +809,12 @@ proc sgplot data=work.resid_plot_means;
     yaxis label="Cohort-Adjusted Rate of HS Completion"
           min=0.65 max=1;
     keylegend / title="Family Income vs EITC Phaseout Ceiling";
-    title "Cohort-Adjusted HS Completion Rate by EITC Exposure and Income Group";
-    footnote "Note: "
-             "Numbers on points show observation count per bin.";
 run;
+title;
+footnote;
 
+title "Cohort-Adjusted Bachelors Completion Rate by EITC Exposure and Income Group";
+footnote &FootOpts "Note: Numbers on points show observation count per bin.";
 proc sgplot data=work.resid_plot_means;
     series x=eitc_bin y=mean_bach / group=income_group
            markers markerattrs=(size=8) lineattrs=(thickness=2);
@@ -795,15 +826,11 @@ proc sgplot data=work.resid_plot_means;
     yaxis label="Cohort-Adjusted Rate of Bachelors Completion"
           min=0 max=0.45;
     keylegend / title="Family Income vs EITC Phaseout Ceiling";
-    title "Cohort-Adjusted Bachelors Completion Rate by EITC Exposure and Income Group";
-    footnote "Note: "
-             "Numbers on points show observation count per bin.";
 run;
+title;
+footnote;
 
 ods pdf close;
-
-
-
 
 
 
