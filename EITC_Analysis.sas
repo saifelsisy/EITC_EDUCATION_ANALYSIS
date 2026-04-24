@@ -4,11 +4,15 @@ Personal Project on the Earned Income Tax Credits effect
 on Education Outcomes
 ;
 
-x "cd S:\EITC\Data";
+%let root = S:\EITC;
+
+x "cd &root.\Data";
 libname InputDS ".";
 
-x "cd S:\EITC\Output";
+x "cd &root.\Output";
 libname P2 ".";
+
+Ods listing gpath = “&root.\Output\Visuals”;
 
 ods pdf file="EITC_Summary_Stats.pdf" dpi=300 style=Sapphire startpage=never;
 ods graphics / width=5.5in;;
@@ -216,6 +220,18 @@ data work.cleaned_long_temp;
     end;
 
     if AGEOFINDIVIDUAL in (0, 999)         then AGEOFINDIVIDUAL = .;
+        _birth_year = .;
+    do _b = 1 to 43;
+        if age_w[_b] > 0 and age_w[_b] < 120 then do;
+            _birth_year = yr_map[_b] - age_w[_b];
+            leave;
+        end;
+    end;
+    if missing(AGEOFINDIVIDUAL) and not missing(_birth_year) then do;
+        AGEOFINDIVIDUAL = YEAR - _birth_year;
+        If AGEOFINDIVIDUAL < 0 then AGEOFINDIVIDUAL = .;
+end;
+
     if EDUCATIONATTAINED in (0,96,97,98,99) then EDUCATIONATTAINED = .;
 
     if YEAR < 1993 then do;
@@ -300,7 +316,7 @@ data work.analysis_sample;
            modal_nkids nk0 nk1 nk2 nk3 nk4 nk5 nk6plus
            sex_val race_val
            Subsample
-  first_post86_state; 
+           first_post86_state;
 
 
     if first.person_id then do;
@@ -326,7 +342,7 @@ data work.analysis_sample;
         sex_val   = .;
         race_val  = .;
         subsample = .;
-        first_post86_state = .; 
+        first_post86_state = .;
     end;
 
     if missing(birth_year_est)
@@ -337,12 +353,10 @@ data work.analysis_sample;
     in_exposure_age = (not missing(AGEOFINDIVIDUAL)
                        and 10 <= AGEOFINDIVIDUAL <= 16);
 
-/* Capture first observed state from any post-1986 wave as fallback
-   for persons whose ages 10-16 window predates 1986 state data. */
-if missing(first_post86_state)
-    and not missing(STATE)
-    and YEAR >= 1986
-    then first_post86_state = STATE;
+    if missing(first_post86_state)
+        and not missing(STATE)
+        and YEAR >= 1986
+        then first_post86_state = STATE;
 
     if in_exposure_age then do;
         ever_age_10_16 = 1;
@@ -352,8 +366,6 @@ if missing(first_post86_state)
         end;
     end;
 
-    /* Sex and race are time-stable. Capture first non-missing value
-       from any wave across the full panel for each person. */
     if missing(sex_val)  and not missing(SEXOFINDIVIDUAL)
         then sex_val  = SEXOFINDIVIDUAL;
     if missing(race_val) and not missing(RACE)
@@ -361,31 +373,266 @@ if missing(first_post86_state)
     if missing(subsample) and not missing(WHETHERSAMPLEORNONSAMPLE)
         then subsample = WHETHERSAMPLEORNONSAMPLE;
 
-    select (YEAR);
-        when (1975,1976,1977,1978)           phaseout_ceiling = 8000;
-        when (1979,1980,1981,1982,1983,1984) phaseout_ceiling = 10000;
-        when (1985,1986)                     phaseout_ceiling = 11000;
-        when (1987)                          phaseout_ceiling = 15432;
-        when (1988)                          phaseout_ceiling = 18576;
-        when (1989)                          phaseout_ceiling = 19340;
-        when (1990)                          phaseout_ceiling = 20264;
-        when (1991)                          phaseout_ceiling = 21250;
-        when (1992)                          phaseout_ceiling = 22370;
-        when (1993)                          phaseout_ceiling = 23050;
-        when (1994)                          phaseout_ceiling = 25296;
-        when (1995)                          phaseout_ceiling = 26673;
-        when (1996)                          phaseout_ceiling = 28495;
-        when (1997)                          phaseout_ceiling = 29290;
-        when (1999)                          phaseout_ceiling = 30580;
-        when (2001)                          phaseout_ceiling = 32121;
-        when (2003)                          phaseout_ceiling = 33692;
-        when (2005)                          phaseout_ceiling = 35263;
-        when (2007)                          phaseout_ceiling = 37783;
-        when (2009)                          phaseout_ceiling = 43279;
-        when (2011)                          phaseout_ceiling = 43998;
-        when (2013)                          phaseout_ceiling = 46227;
-        when (2015)                          phaseout_ceiling = 47747;
-        otherwise phaseout_ceiling = .;
+    phaseout_floor   = .;
+    phaseout_ceiling = .;
+
+    if YEAR in (1975,1976,1977,1978) then do;
+            phaseout_floor   = 4000;
+            phaseout_ceiling = 8000;
+        end;
+    else if YEAR in (1979,1980,1981,1982,1983,1984) then do;
+            phaseout_floor   = 6000;
+            phaseout_ceiling = 10000;
+        end;
+    else if YEAR in (1985,1986) then do;
+            phaseout_floor   = 6500;
+            phaseout_ceiling = 11000;
+        end;
+    else if YEAR = 1987 then do;
+            phaseout_floor   = 6920;
+            phaseout_ceiling = 15432;
+        end;
+    else if YEAR = 1988 then do;
+        if N_KIDS >= 1 then do;
+            phaseout_floor   = 9840;
+            phaseout_ceiling = 18576;
+        end;
+    end;
+    else if YEAR = 1989 then do;
+            phaseout_floor   = 10240;
+            phaseout_ceiling = 19340;
+        end;
+    else if YEAR = 1990 then do;
+            phaseout_floor   = 10730;
+            phaseout_ceiling = 20264;
+        end;
+    else if YEAR = 1991 then do;
+        if N_KIDS = 1 then do;
+            phaseout_floor   = 11250;
+            phaseout_ceiling = 21250;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 11250;
+            phaseout_ceiling = 21250;
+        end;
+    end;
+    else if YEAR = 1992 then do;
+        if N_KIDS = 1 then do;
+            phaseout_floor   = 11840;
+            phaseout_ceiling = 22370;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 11840;
+            phaseout_ceiling = 22370;
+        end;
+    end;
+    else if YEAR = 1993 then do;
+        if N_KIDS = 1 then do;
+            phaseout_floor   = 12200;
+            phaseout_ceiling = 23050;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 12200;
+            phaseout_ceiling = 23050;
+        end;
+    end;
+    else if YEAR = 1994 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 5000;
+            phaseout_ceiling = 9000;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 11000;
+            phaseout_ceiling = 23755;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 11000;
+            phaseout_ceiling = 25296;
+        end;
+    end;
+    else if YEAR = 1995 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 5130;
+            phaseout_ceiling = 9230;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 11290;
+            phaseout_ceiling = 24396;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 11290;
+            phaseout_ceiling = 26673;
+        end;
+    end;
+    else if YEAR = 1996 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 5280;
+            phaseout_ceiling = 9500;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 11610;
+            phaseout_ceiling = 25078;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 11610;
+            phaseout_ceiling = 28495;
+        end;
+    end;
+    else if YEAR = 1997 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 5430;
+            phaseout_ceiling = 9770;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 11930;
+            phaseout_ceiling = 25750;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 11930;
+            phaseout_ceiling = 29290;
+        end;
+    end;
+    else if YEAR = 1999 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 5670;
+            phaseout_ceiling = 10200;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 12460;
+            phaseout_ceiling = 26928;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 12460;
+            phaseout_ceiling = 30580;
+        end;
+    end;
+    else if YEAR = 2001 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 5950;
+            phaseout_ceiling = 10710;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 13090;
+            phaseout_ceiling = 28281;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 13090;
+            phaseout_ceiling = 32121;
+        end;
+    end;
+    else if YEAR = 2003 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 6240;
+            phaseout_ceiling = 11230;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 13730;
+            phaseout_ceiling = 29666;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 13730;
+            phaseout_ceiling = 33692;
+        end;
+    end;
+    else if YEAR = 2005 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 6530;
+            phaseout_ceiling = 11750;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 14370;
+            phaseout_ceiling = 31030;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 14370;
+            phaseout_ceiling = 35263;
+        end;
+    end;
+    else if YEAR = 2007 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 7000;
+            phaseout_ceiling = 12590;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 15390;
+            phaseout_ceiling = 33241;
+        end;
+        else if N_KIDS >= 2 then do;
+            phaseout_floor   = 15390;
+            phaseout_ceiling = 37783;
+        end;
+    end;
+    else if YEAR = 2009 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 7470;
+            phaseout_ceiling = 13440;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 16420;
+            phaseout_ceiling = 35463;
+        end;
+        else if N_KIDS = 2 then do;
+            phaseout_floor   = 16420;
+            phaseout_ceiling = 40295;
+        end;
+        else if N_KIDS >= 3 then do;
+            phaseout_floor   = 16420;
+            phaseout_ceiling = 43279;
+        end;
+    end;
+    else if YEAR = 2011 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 7590;
+            phaseout_ceiling = 13660;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 16690;
+            phaseout_ceiling = 36052;
+        end;
+        else if N_KIDS = 2 then do;
+            phaseout_floor   = 16690;
+            phaseout_ceiling = 40964;
+        end;
+        else if N_KIDS >= 3 then do;
+            phaseout_floor   = 16690;
+            phaseout_ceiling = 43998;
+        end;
+    end;
+    else if YEAR = 2013 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 7970;
+            phaseout_ceiling = 14340;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 17530;
+            phaseout_ceiling = 37870;
+        end;
+        else if N_KIDS = 2 then do;
+            phaseout_floor   = 17530;
+            phaseout_ceiling = 43038;
+        end;
+        else if N_KIDS >= 3 then do;
+            phaseout_floor   = 17530;
+            phaseout_ceiling = 46227;
+        end;
+    end;
+    else if YEAR = 2015 then do;
+        if N_KIDS = 0 then do;
+            phaseout_floor   = 8240;
+            phaseout_ceiling = 14820;
+        end;
+        else if N_KIDS = 1 then do;
+            phaseout_floor   = 18110;
+            phaseout_ceiling = 39131;
+        end;
+        else if N_KIDS = 2 then do;
+            phaseout_floor   = 18110;
+            phaseout_ceiling = 44454;
+        end;
+        else if N_KIDS >= 3 then do;
+            phaseout_floor   = 18110;
+            phaseout_ceiling = 47747;
+        end;
     end;
 
     if in_exposure_age then do;
@@ -398,7 +645,8 @@ if missing(first_post86_state)
         if not missing(TOTALFAMILYINCOME) and TOTALFAMILYINCOME > 0 then do;
             avg_income   = avg_income + TOTALFAMILYINCOME;
             income_count = income_count + 1;
-            if not missing(phaseout_ceiling) then do;
+            if not missing(phaseout_floor) and not missing(phaseout_ceiling)
+                and TOTALFAMILYINCOME >= phaseout_floor then do;
                 if TOTALFAMILYINCOME <= phaseout_ceiling
                     then times_below_phaseout = times_below_phaseout + 1;
                 else     times_above_phaseout = times_above_phaseout + 1;
@@ -445,8 +693,6 @@ if missing(first_post86_state)
             then avg_family_income = avg_income / income_count;
             else avg_family_income = .;
 
-        /* below_phaseout retained for Step 7 graphs only —
-           not used in any regression. */
         if times_below_phaseout > 0 or times_above_phaseout > 0 then do;
             if times_below_phaseout >= 1
                 then below_phaseout = 1;
@@ -454,7 +700,7 @@ if missing(first_post86_state)
         end;
         else below_phaseout = .;
 
-       if state_count > 0 then do;
+        if state_count > 0 then do;
             _max_votes = 0;
             do _j = 1 to 56;
                 if sv[_j] > _max_votes then do;
@@ -539,8 +785,6 @@ data work.analysis_sample;
     if not missing(race) then do;
         race_black = (race = 2);
         race_other = (race in (3,4,5,6,7));
-        /* race=1 (White) is the implicit reference — no indicator
-           created for White. */
     end;
     else do;
         race_black = .;
@@ -703,7 +947,7 @@ title;
 
 footnote;
 
-/* GRAPHS - COHORT-ADJUSTED OUTCOME RATES BY EITC BIN AND INCOME GROUP */
+/* GRAPHS - COHORT-ADJUSTED OUTCOME RATES BY EITC BIN, INCOME GROUP, AND KIDS GROUP */
 
 proc glm data=work.analysis_sample noprint;
     class cohort_ref;
@@ -778,9 +1022,11 @@ data work.resid_plot_means;
     if a and min_n >= 10;
     drop min_n _type_ _freq_;
 run;
+ 
+Ods graphics / reset imagename= “College_Attendance_Plot” imagefmt=png width = 7in height = 5in;
 
 title "Cohort-Adjusted College Attendance Rate by EITC Exposure and Income Group";
-footnote &FootOpts "Note: Numbers on points show observation count per bin.";
+footnote &FootOpts "Note: Numbers on points show observation count per bin. Income floor based on EITC phaseout beginning income by year and number of children.";
 proc sgplot data=work.resid_plot_means;
     series x=eitc_bin y=mean_college / group=income_group
            markers markerattrs=(size=8) lineattrs=(thickness=2);
@@ -794,10 +1040,12 @@ proc sgplot data=work.resid_plot_means;
     keylegend / title="Family Income vs EITC Phaseout Ceiling";
 run;
 title;
-footnote;
+Footnote;
+
+Ods graphics / reset imagename= “HS_Completion_Plot” imagefmt=png width = 7in height = 5in;
 
 title "Cohort-Adjusted HS Completion Rate by EITC Exposure and Income Group";
-footnote &FootOpts "Note: Numbers on points show observation count per bin.";
+footnote &FootOpts "Note: Numbers on points show observation count per bin. Income floor based on EITC phaseout beginning income by year and number of children.";
 proc sgplot data=work.resid_plot_means;
     series x=eitc_bin y=mean_hs / group=income_group
            markers markerattrs=(size=8) lineattrs=(thickness=2);
@@ -813,8 +1061,10 @@ run;
 title;
 footnote;
 
+Ods graphics / reset imagename= “Bachelors_Completion_Plot” imagefmt=png width = 7in height = 5in;
+
 title "Cohort-Adjusted Bachelors Completion Rate by EITC Exposure and Income Group";
-footnote &FootOpts "Note: Numbers on points show observation count per bin.";
+footnote &FootOpts "Note: Numbers on points show observation count per bin. Income floor based on EITC phaseout beginning income by year and number of children.";
 proc sgplot data=work.resid_plot_means;
     series x=eitc_bin y=mean_bach / group=income_group
            markers markerattrs=(size=8) lineattrs=(thickness=2);
@@ -831,6 +1081,5 @@ title;
 footnote;
 
 ods pdf close;
-
 
 
