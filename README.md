@@ -18,7 +18,7 @@ This project was created for my capstone class senior year in Economics
 
 ## Visuals
 
-![High School Completion Plot](Visuals/HS_Completion_Plot.png)
+![High School Completion Plot](Visuals/HS_Completion_Plot.png) 
 
 ![College Attendance Plot](Visuals/College_Attendance_Plot.png)
 
