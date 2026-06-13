@@ -1,6 +1,6 @@
 # Earned Income Tax Credit's Effect on Education Outcomes 
 
-This project was created for my capstone class senior year in Economics
+This project was originally started for my capstone class senior year in Economics and was expanded on massively as a passion project. 
 
 ## Author
  Saif Elsisy
